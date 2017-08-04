@@ -28,6 +28,7 @@ The following package metadata options are available in the `.debutize.conf`:
 
 - `pkg_name` - The package name *\*required*
 - `pkg_version` - The package version *\*required*
+- `pkg_depends` - The package's dependencies
 - `pkg_architecture` - The (space-delimited) architectures of your package (can be `all` if architecture agnostic) *\*required*
 - `pkg_section` - The section your package should be included in for the repository
 - `pkg_priority` - The package priority
@@ -40,6 +41,7 @@ The following package metadata options are available in the `.debutize.conf`:
 # package metadata
 pkg_name="fooproj"
 pkg_version="2.0"
+pkg_depends="baz"
 pkg_architecture="amd64 i386"
 pkg_section="admin"
 pkg_priority="extra"
