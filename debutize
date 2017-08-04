@@ -1,0 +1,195 @@
+#!/bin/bash
+
+if [ -z "$1" ]; then
+    echo "usage: $0 dir [ name  [ version ] ]"
+    exit 1
+fi
+
+dir=$1
+
+if [ ! -d "$dir" ]; then
+    echo "error: directory '$dir' doesn't exist"
+    exit 1
+fi
+
+(
+
+if [ ! "$dir" = "$(pwd)" ]; then
+    cd $dir
+fi
+
+# default values
+pkg_architecture="all"
+pkg_depends=""
+pkg_section=""
+pkg_priority="extra"
+pkg_maintainer=""
+pkg_description=""
+targets="conf/:/etc/$pkg_name/ etc/:/etc/$pkg_name/ bin/:/usr/sbin/ lib/:/usr/lib/$pkg_name/"
+conffiles="/etc/$pkg_name:*.conf"
+
+# load project config
+if [ ! -f "./.debutize.conf" ]; then
+    echo "error: .debutize.conf not found"
+    exit 1
+fi
+
+. "$(pwd)/.debutize.conf"
+
+# environmental overrides
+if [ ! -z "$DEBUTIZE_PKG_NAME" ]; then
+    pkg_name=$DEBUTIZE_PKG_NAME
+fi
+if [ ! -z "$DEBUTIZE_PKG_VERSION" ]; then
+    pkg_version=$DEBUTIZE_PKG_VERSION
+fi
+
+# command-line overrides
+if [ ! -z "$2" ]; then
+    pkg_name=$2
+fi
+if [ ! -z "$3" ]; then
+    pkg_version=$3
+fi
+
+# check that required values are defined
+for i in name version architecture maintainer description; do
+    if [ -z "$(eval "echo \$pkg_$i")" ]; then
+        echo "error: pkg_$i must be defined"
+        exit 2 
+    fi
+done
+
+# run prerun command
+if [ ! -z "$prerun" ]; then
+    echo -n "running prerun command..."
+    $prerun > /dev/null
+    echo "done"
+fi
+
+tmpdir="/tmp/debutize_$(echo "$pkg_name $pkg_version $(date)" | sha1sum | cut -d' ' -f1)"
+
+if [ -d "$tmpdir" ]; then
+    rm -r "$tmpdir"
+fi
+
+echo -n "creating temporary directory $tmpdir..."
+mkdir -p "$tmpdir/deb/DEBIAN"
+chmod 700 "$tmpdir"
+echo "done"
+
+# populate the control file
+echo -n "generating DEBIAN/control..."
+echo "Package: $pkg_name
+Version: $pkg_version
+Architecture: $pkg_architecture
+Depends: $pkg_depends
+Section: $pkg_section
+Priority: $pkg_priority
+Maintainer: $pkg_maintainer
+Description: $pkg_description" >> $tmpdir/deb/DEBIAN/control
+echo "done"
+
+# if specified, copy etc targets
+if [ ! -z "$targets" ]; then
+    echo "copying targets..."
+    for pair in $targets; do
+        src=$(echo $pair | cut -d: -f1)
+        if [ ! -z "$(echo $pair | grep ':')" ]; then
+            dst=$(echo $pair | cut -d: -f2 | sed 's/^\///')
+        fi
+
+        if [ ! -e "$src" ]; then
+            echo "  warning: $src not found, skipping" 1>&2
+            continue
+        fi
+
+        if [ -z "$dst" ]; then
+            dst=$src
+        fi
+
+        if [ ! -z "$(echo $src | grep -e '/$')" ]; then
+            mkdir -p $tmpdir/deb/$dst
+            echo "  copying $src* to $tmpdir/deb/$dst"
+            cp -rp $src* $tmpdir/deb/$dst
+        else
+            if [ ! -z "$(echo $dst | grep -e '/$')" ]; then
+                mkdir -p $tmpdir/deb/$dst
+            else
+                mkdir -p $tmpdir/deb/$(dirname $dst)
+            fi
+            echo "  copying $src to $tmpdir/deb/$dst"
+            cp -rp $src $tmpdir/deb/$dst
+        fi
+    done
+    echo "done"
+fi
+
+# populate the conffiles file
+echo "generating DEBIAN/conffiles..."
+for pair in $conffiles; do
+    base=$(echo $pair | cut -d: -f1 | sed 's/^\///')
+    glob=$(echo $pair | cut -d: -f2 -s)
+
+    if [ ! -d "$tmpdir/deb/$base" ]; then
+        echo "  warning: confspec $base not found, skipping" 1>&2
+        continue
+    fi
+
+    if [ -d "$base" ]; then
+        if [ -z "$glob" ]; then
+            glob="*"
+        fi
+        echo "  including all files under /$base"
+        (
+          cd $tmpdir/deb
+          find $base -name "$glob" -type f -print0 | xargs -0 -I? echo /? >> "DEBIAN/conffiles"
+        )
+    else
+        echo "  including /$base"
+        echo "/$base" >> "$tmpdir/deb/DEBIAN/conffiles"
+    fi
+done
+echo "done"
+
+# populate the md5sums and sha1sums files
+echo -n "generating DEBIAN/md5sums and DEBIAN/sha1sums..."
+( cd $tmpdir/deb | find . -type f | grep -v -e '^DEBIAN' | xargs md5sum | sed s/\ ^\.// >> "$tmpdir/deb/DEBIAN/md5sums" )
+( cd $tmpdir/deb | find . -type f | grep -v -e '^DEBIAN' | xargs sha1sum | sed s/\ ^\.// >> "$tmpdir/deb/DEBIAN/sha1sums" )
+echo "done"
+
+# run postrun command
+if [ ! -z "$postrun" ]; then
+    echo -n "running postrun command..."
+    $postrun
+    echo "done"
+fi
+
+# prepare package name
+pkgdst="${pkg_name}_${pkg_version}"
+if [ ! -z "$pkg_architecture" ]; then
+    pkgdst="${pkgdst}_${pkg_architecture}"
+fi
+
+# build package
+echo -n "building package..."
+failed=0
+dpkg-deb -b "$tmpdir/deb" $pkgdst.deb > /dev/null
+if [ ! $? = 0 ]; then
+    failed=1
+    echo "failed!"
+else
+    echo "done"
+fi
+
+echo -n "cleaning up..."
+rm -r "$tmpdir"
+echo "done"
+
+if [ $failed = 0 ]; then
+    echo "built $pkgdst.deb"
+else
+    echo "failed to build $pkgdst.deb due to errors"
+fi
+
+)
