@@ -136,7 +136,7 @@ for pair in $conffiles; do
         continue
     fi
 
-    if [ -d "$base" ]; then
+    if [ -d "$tmpdir/deb/$base" ]; then
         if [ -z "$glob" ]; then
             glob="*"
         fi
@@ -161,7 +161,7 @@ echo "done"
 # run postrun command
 if [ ! -z "$postrun" ]; then
     echo -n "running postrun command..."
-    $postrun
+    ( cd $tmpdir/dev; $postrun )
     echo "done"
 fi
 
