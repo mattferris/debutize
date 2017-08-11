@@ -1,10 +1,17 @@
 #!/bin/bash
 
+helpersdir="/usr/share/debutize/helpers"
+
+if [ ! -z "$DEBUTIZE_HELPERSDIR" ]; then
+    helpersdir="$DEBUTIZE_HELPERSDIR"
+fi
+
 if [ -z "$1" ]; then
     echo "usage: $0 dir [ name  [ version ] ]"
     exit 1
 fi
 
+origin=$(pwd)
 dir=$1
 
 if [ ! -d "$dir" ]; then
@@ -27,6 +34,7 @@ pkg_maintainer=""
 pkg_description=""
 targets="conf/:/etc/$pkg_name/ etc/:/etc/$pkg_name/ bin/:/usr/sbin/ lib/:/usr/lib/$pkg_name/"
 conffiles="/etc/$pkg_name:*.conf"
+helpers=""
 
 # load project config
 if [ ! -f "./.debutize.conf" ]; then
@@ -67,12 +75,15 @@ if [ ! -z "$prerun" ]; then
     echo "done"
 fi
 
+# determine build directory
 tmpdir="/tmp/debutize_$(echo "$pkg_name $pkg_version $(date)" | sha1sum | cut -d' ' -f1)"
 
+# delete the build directory if it already exists
 if [ -d "$tmpdir" ]; then
     rm -r "$tmpdir"
 fi
 
+# make the build directory
 echo -n "creating temporary directory $tmpdir..."
 mkdir -p "$tmpdir/deb/DEBIAN"
 chmod 700 "$tmpdir"
@@ -157,6 +168,40 @@ echo -n "generating DEBIAN/md5sums and DEBIAN/sha1sums..."
 ( cd $tmpdir/deb | find . -type f | grep -v -e '^DEBIAN' | xargs md5sum | sed s/\ ^\.// >> "$tmpdir/deb/DEBIAN/md5sums" )
 ( cd $tmpdir/deb | find . -type f | grep -v -e '^DEBIAN' | xargs sha1sum | sed s/\ ^\.// >> "$tmpdir/deb/DEBIAN/sha1sums" )
 echo "done"
+
+# process any defined helper commands
+if [ ! -z "$helpers" ]; then
+    echo "processing helpers..."
+
+    for pattern in $helpers; do
+        for helper in $(find $helpersdir -name "$pattern" -type f); do
+            type=$(basename $helper | cut -d. -f2)
+
+            case $type in
+                postinst|preinst|postrm|prerm)
+                    echo "  $(basename $helper)"
+                    script="$tmpdir/deb/DEBIAN/$type"
+                    if [ ! -f "$script" ]; then
+                        echo -e "#!/bin/sh\nset -e\n" > $script
+                        chmod +x $script
+                        if [ ! -z "$service_name" ]; then
+                            echo "SERVICE_NAME=\"$service_name\"" >> $script
+                        fi
+                    fi
+                    echo "### start $helper" >> $script
+                    cat $helper >> $script
+                    echo "### end $helper" >> $script
+                    ;;
+                *)
+                    echo "error: helper not found '$helper'"
+                    exit 3
+                    ;;
+            esac 
+        done
+    done
+
+    echo "done"
+fi
 
 # run postrun command
 if [ ! -z "$postrun" ]; then

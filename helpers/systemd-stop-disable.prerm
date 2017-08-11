@@ -1,0 +1,6 @@
+if [ "$(systemctl is-active $SERVICE_NAME)" = "active" ]; then
+    systemctl stop $SERVICE_NAME
+fi
+if [ "$(systemctl is-enabled $SERVICE_NAME)" = "enabled" ]; then
+    systemctl disable $SERVICE_NAME
+fi

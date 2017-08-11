@@ -81,3 +81,20 @@ conffiles="/etc/fooproj:*.conf"
 Even files in subdirectories of `/etc/fooproj` would be included. *debutize*
 uses `find $directory -name "$pattern"` to locate files.
 
+### Helpers
+
+Helpers assist with the build process. Currently, only four helpers are
+available: `systemd-stop.preinst`, `systemd-enable.postinst`, 
+`systemd-start.postinst`, and `systemd-stop-disable.prerm`. These helpers
+enable, start, stop, and disable the packages systemd unit respsectively.
+Helpers are enabled using the `helpers` variable in `.debutize.conf`.
+
+```
+helpers="systemd-stop.preinst systemd-enable.postinst systemd-start.postinst systemd-stop-disable.prerm`"
+```
+
+For convenience, you can use a pattern syntax to simply enable all four.
+
+```
+helpers="systemd*"
+```
