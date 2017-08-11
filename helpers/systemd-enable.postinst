@@ -1,0 +1,3 @@
+if [ ! "$(systemctl is-enabled $SERVICE_NAME)" = "enabled" ]; then
+    systemctl enable $SERVICE_NAME
+fi

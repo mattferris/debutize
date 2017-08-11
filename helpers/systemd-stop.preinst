@@ -1,0 +1,3 @@
+if [ "$(systemctl is-active $SERVICE_NAME)" = "active" ]; then
+    systemctl stop $SERVICE_NAME
+fi
