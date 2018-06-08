@@ -1,5 +1,9 @@
 #!/bin/bash
 
+if [ ! "$(whoami)" = "root" ]; then
+    echo "warning: not running as root!"
+fi
+
 helpersdir="/usr/share/debutize/helpers"
 
 if [ ! -z "$DEBUTIZE_HELPERSDIR" ]; then
