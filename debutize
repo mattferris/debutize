@@ -1,5 +1,9 @@
 #!/bin/bash
 
+if [ ! "$(whoami)" = "root" ]; then
+    echo "warning: not running as root!"
+fi
+
 helpersdir="/usr/share/debutize/helpers"
 
 if [ ! -z "$DEBUTIZE_HELPERSDIR" ]; then
@@ -68,13 +72,6 @@ for i in name version architecture maintainer description; do
     fi
 done
 
-# run prerun command
-if [ ! -z "$prerun" ]; then
-    echo -n "running prerun command..."
-    $prerun > /dev/null
-    echo "done"
-fi
-
 # determine build directory
 tmpdir="/tmp/debutize_$(echo "$pkg_name $pkg_version $(date)" | sha1sum | cut -d' ' -f1)"
 
@@ -88,6 +85,13 @@ echo -n "creating temporary directory $tmpdir..."
 mkdir -p "$tmpdir/deb/DEBIAN"
 chmod 700 "$tmpdir"
 echo "done"
+
+# run prerun command
+if [ ! -z "$prerun" ]; then
+    echo -n "running prerun command..."
+    ( cd $origin; /bin/sh -c "$origin/$prerun $tmpdir" > /dev/null )
+    echo "done"
+fi
 
 # populate the control file
 echo -n "generating DEBIAN/control..."
@@ -206,7 +210,7 @@ fi
 # run postrun command
 if [ ! -z "$postrun" ]; then
     echo -n "running postrun command..."
-    ( cd $tmpdir/dev; $postrun )
+    ( cd $tmpdir/deb; /bin/sh -c "$origin/$postrun $origin" > /dev/null )
     echo "done"
 fi
 
