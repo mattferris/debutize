@@ -1,16 +1,37 @@
 #!/bin/bash
+#
+# debutize - A simple .deb builder
+#
 
-if [ ! "$(whoami)" = "root" ]; then
-    echo "warning: not running as root!"
+loglvl=2
+
+# log messages to stderr
+_log() {
+    [[ $loglvl -lt $1 ]] && echo $2: $3 >&2
+}
+
+# handle error messages
+_err() {
+    _log 1 "error" $1
+    [[ ! -z $2 ]] && exit $2
+}
+
+# handle warning messages
+_warn() {
+    _log 2 "warning" $1
+}
+
+if [[ ! "$(whoami)" = "root" ]]; then
+    _warn "not running as root!"
 fi
 
 helpersdir="/usr/share/debutize/helpers"
 
-if [ ! -z "$DEBUTIZE_HELPERSDIR" ]; then
+if [[ ! -z "$DEBUTIZE_HELPERSDIR" ]]; then
     helpersdir="$DEBUTIZE_HELPERSDIR"
 fi
 
-if [ -z "$1" ]; then
+if [[ -z "$1" ]]; then
     echo "usage: $0 dir [ name  [ version ] ]"
     exit 1
 fi
@@ -18,14 +39,13 @@ fi
 origin=$(pwd)
 dir=$1
 
-if [ ! -d "$dir" ]; then
-    echo "error: directory '$dir' doesn't exist"
-    exit 1
+if [[ ! -d "$dir" ]]; then
+    _err "directory '$dir' doesn't exist" 1
 fi
 
 (
 
-if [ ! "$dir" = "$(pwd)" ]; then
+if [[ ! "$dir" = "$(pwd)" ]]; then
     cd $dir
 fi
 
@@ -41,34 +61,32 @@ conffiles="/etc/$pkg_name:*.conf"
 helpers=""
 
 # load project config
-if [ ! -f "./.debutize.conf" ]; then
-    echo "error: .debutize.conf not found"
-    exit 1
+if [[ ! -f "./.debutize.conf" ]]; then
+    _err ".debutize.conf not found" 1
 fi
 
 . "$(pwd)/.debutize.conf"
 
 # environmental overrides
-if [ ! -z "$DEBUTIZE_PKG_NAME" ]; then
+if [[ ! -z "$DEBUTIZE_PKG_NAME" ]]; then
     pkg_name=$DEBUTIZE_PKG_NAME
 fi
-if [ ! -z "$DEBUTIZE_PKG_VERSION" ]; then
+if [[ ! -z "$DEBUTIZE_PKG_VERSION" ]]; then
     pkg_version=$DEBUTIZE_PKG_VERSION
 fi
 
 # command-line overrides
-if [ ! -z "$2" ]; then
+if [[ ! -z "$2" ]]; then
     pkg_name=$2
 fi
-if [ ! -z "$3" ]; then
+if [[ ! -z "$3" ]]; then
     pkg_version=$3
 fi
 
 # check that required values are defined
 for i in name version architecture maintainer description; do
-    if [ -z "$(eval "echo \$pkg_$i")" ]; then
-        echo "error: pkg_$i must be defined"
-        exit 2 
+    if [[ -z "$(eval "echo \$pkg_$i")" ]]; then
+        _err "pkg_$i must be defined" 2
     fi
 done
 
@@ -76,7 +94,7 @@ done
 tmpdir="/tmp/debutize_$(echo "$pkg_name $pkg_version $(date)" | sha1sum | cut -d' ' -f1)"
 
 # delete the build directory if it already exists
-if [ -d "$tmpdir" ]; then
+if [[ -d "$tmpdir" ]]; then
     rm -r "$tmpdir"
 fi
 
@@ -87,7 +105,7 @@ chmod 700 "$tmpdir"
 echo "done"
 
 # run prerun command
-if [ ! -z "$prerun" ]; then
+if [[ ! -z "$prerun" ]]; then
     echo -n "running prerun command..."
     ( cd $origin; /bin/sh -c "$origin/$prerun $tmpdir" > /dev/null )
     echo "done"
@@ -106,29 +124,29 @@ Description: $pkg_description" >> $tmpdir/deb/DEBIAN/control
 echo "done"
 
 # if specified, copy etc targets
-if [ ! -z "$targets" ]; then
+if [[ ! -z "$targets" ]]; then
     echo "copying targets..."
     for pair in $targets; do
         src=$(echo $pair | cut -d: -f1)
-        if [ ! -z "$(echo $pair | grep ':')" ]; then
+        if [[ ! -z "$(echo $pair | grep ':')" ]]; then
             dst=$(echo $pair | cut -d: -f2 | sed 's/^\///')
         fi
 
-        if [ ! -e "$src" ]; then
-            echo "  warning: $src not found, skipping" 1>&2
+        if [[ ! -e "$src" ]]; then
+            _warn "$src not found, skipping" "  "
             continue
         fi
 
-        if [ -z "$dst" ]; then
+        if [[ -z "$dst" ]]; then
             dst=$src
         fi
 
-        if [ ! -z "$(echo $src | grep -e '/$')" ]; then
+        if [[ ! -z "$(echo $src | grep -e '/$')" ]]; then
             mkdir -p $tmpdir/deb/$dst
             echo "  copying $src* to $tmpdir/deb/$dst"
             cp -rp $src* $tmpdir/deb/$dst
         else
-            if [ ! -z "$(echo $dst | grep -e '/$')" ]; then
+            if [[ ! -z "$(echo $dst | grep -e '/$')" ]]; then
                 mkdir -p $tmpdir/deb/$dst
             else
                 mkdir -p $tmpdir/deb/$(dirname $dst)
@@ -146,12 +164,12 @@ for pair in $conffiles; do
     base=$(echo $pair | cut -d: -f1 | sed 's/^\///')
     glob=$(echo $pair | cut -d: -f2 -s)
 
-    if [ ! -d "$tmpdir/deb/$base" ]; then
-        echo "  warning: confspec $base not found, skipping" 1>&2
+    if [[ ! -d "$tmpdir/deb/$base" ]]; then
+        _warn "confspec $base not found, skipping"
         continue
     fi
 
-    if [ -d "$tmpdir/deb/$base" ]; then
+    if [[ -d "$tmpdir/deb/$base" ]]; then
         if [ -z "$glob" ]; then
             glob="*"
         fi
@@ -174,7 +192,7 @@ echo -n "generating DEBIAN/md5sums and DEBIAN/sha1sums..."
 echo "done"
 
 # process any defined helper commands
-if [ ! -z "$helpers" ]; then
+if [[ ! -z "$helpers" ]]; then
     echo "processing helpers..."
 
     for pattern in $helpers; do
@@ -185,10 +203,10 @@ if [ ! -z "$helpers" ]; then
                 postinst|preinst|postrm|prerm)
                     echo "  $(basename $helper)"
                     script="$tmpdir/deb/DEBIAN/$type"
-                    if [ ! -f "$script" ]; then
+                    if [[ ! -f "$script" ]]; then
                         echo -e "#!/bin/sh\nset -e\n" > $script
                         chmod +x $script
-                        if [ ! -z "$service_name" ]; then
+                        if [[ ! -z "$service_name" ]]; then
                             echo "SERVICE_NAME=\"$service_name\"" >> $script
                         fi
                     fi
@@ -197,8 +215,7 @@ if [ ! -z "$helpers" ]; then
                     echo "### end $helper" >> $script
                     ;;
                 *)
-                    echo "error: helper not found '$helper'"
-                    exit 3
+                    _err "helper not found '$helper'" 3
                     ;;
             esac 
         done
@@ -208,7 +225,7 @@ if [ ! -z "$helpers" ]; then
 fi
 
 # run postrun command
-if [ ! -z "$postrun" ]; then
+if [[ ! -z "$postrun" ]]; then
     echo -n "running postrun command..."
     ( cd $tmpdir/deb; /bin/sh -c "$origin/$postrun $origin" > /dev/null )
     echo "done"
@@ -216,7 +233,7 @@ fi
 
 # prepare package name
 pkgdst="${pkg_name}_${pkg_version}"
-if [ ! -z "$pkg_architecture" ]; then
+if [[ ! -z "$pkg_architecture" ]]; then
     pkgdst="${pkgdst}_${pkg_architecture}"
 fi
 
@@ -224,7 +241,7 @@ fi
 echo -n "building package..."
 failed=0
 dpkg-deb -b "$tmpdir/deb" $pkgdst.deb > /dev/null
-if [ ! $? = 0 ]; then
+if [[ ! $? = 0 ]]; then
     failed=1
     echo "failed!"
 else
@@ -235,7 +252,7 @@ echo -n "cleaning up..."
 rm -r "$tmpdir"
 echo "done"
 
-if [ $failed = 0 ]; then
+if [[ $failed = 0 ]]; then
     echo "built $pkgdst.deb"
 else
     echo "failed to build $pkgdst.deb due to errors"
