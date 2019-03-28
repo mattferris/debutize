@@ -231,6 +231,29 @@ if [[ ! -z "$postrun" ]]; then
     echo "done"
 fi
 
+# apply permissions map if available
+if [[ -f "$origin/.debutize.pmap" ]]; then
+    echo -n "applying permission map..."
+    {
+    while read line; do
+        mode=$(echo $line | cut -d: -f1)
+        user=$(echo $line | cut -d: -f2)
+        group=$(echo $line | cut -d: -f3)
+        path=$(echo $line | cut -d: -f4)
+        recurse=$(echo $line | cut -d: -f5)
+
+        if [[ "$recurse" == "R" ]]; then
+            opts="-R"
+        fi
+
+        chmod $opts $mode "$tmpdir/deb/$path"
+        chown $opts $user "$tmpdir/deb/$path"
+        chgrp $opts $group "$tmpdir/deb/$path"
+    done
+    } < "$origin/.debutize.pmap"
+    echo "done"
+fi
+
 # prepare package name
 pkgdst="${pkg_name}_${pkg_version}"
 if [[ ! -z "$pkg_architecture" ]]; then
